@@ -28,6 +28,8 @@ AWeapon::AWeapon()
 	BoxTraceEnd = CreateDefaultSubobject<USceneComponent>(TEXT("Box Trace End"));
 	BoxTraceEnd->SetupAttachment(GetRootComponent());
 
+
+
 	//***
 
 }
@@ -65,27 +67,17 @@ void AWeapon::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActo
 void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, 
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	const FVector Start = BoxTraceStart->GetComponentLocation();
-	const FVector End = BoxTraceEnd->GetComponentLocation();
-	
-	TArray<AActor*> ActorsToIgnore;
+	if (GetOwner()->ActorHasTag(TEXT("Enemy")) && OtherActor->ActorHasTag(TEXT("Enemy")))
+		return;	// TODO: friendly fire
+
 	FHitResult BoxHit;
-	ActorsToIgnore.Add(this);
-
-	for (AActor* Actor : IgnoreActors)
-	{
-		ActorsToIgnore.AddUnique(Actor);
-	}
-
-	UKismetSystemLibrary::BoxTraceSingle(
-		this, Start, End, FVector(5.f, 5.f, 5.f), 
-		BoxTraceStart->GetComponentRotation(), 
-		ETraceTypeQuery::TraceTypeQuery1, 
-		false, ActorsToIgnore, EDrawDebugTrace::None,
-		BoxHit, true);
+	BoxTrace(BoxHit);
 
 	if (BoxHit.GetActor())
 	{
+		if (GetOwner()->ActorHasTag(TEXT("Enemy")) && BoxHit.GetActor()->ActorHasTag(TEXT("Enemy")))
+			return;	
+
 		UGameplayStatics::ApplyDamage(
 			BoxHit.GetActor(), Damage, GetInstigator()->GetController(),
 			this, UDamageType::StaticClass());
@@ -94,11 +86,32 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
 		if (HitInterface)
 		{
 			//HitInterface->GetHit(BoxHit.ImpactPoint);
-			HitInterface->Execute_GetHit(BoxHit.GetActor(), BoxHit.ImpactPoint);
+			HitInterface->Execute_GetHit(BoxHit.GetActor(), BoxHit.ImpactPoint, GetOwner());
 		}
-		IgnoreActors.AddUnique(BoxHit.GetActor());
 		CreateFields(BoxHit.ImpactPoint);
 	}
+}
+
+void AWeapon::BoxTrace(FHitResult& BoxHit)
+{
+	const FVector Start = BoxTraceStart->GetComponentLocation();
+	const FVector End = BoxTraceEnd->GetComponentLocation();
+
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Add(this);
+
+	for (AActor* Actor : IgnoreActors)
+	{
+		ActorsToIgnore.AddUnique(Actor);
+	}
+
+	// Execute GetHit
+	UKismetSystemLibrary::BoxTraceSingle(this, Start, End, BoxTraceExtent,
+		BoxTraceStart->GetComponentRotation(), ETraceTypeQuery::TraceTypeQuery1, false, ActorsToIgnore,
+		bShowBoxDebug ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None,
+		BoxHit, true);
+
+	IgnoreActors.AddUnique(BoxHit.GetActor());
 }
 
 
@@ -107,22 +120,39 @@ void AWeapon::Equip(USceneComponent* InParent, FName InSocketName, AActor* NewOw
 {
 	SetOwner(NewOwner);
 	SetInstigator(NewInstigator);
-
 	AttachMeshToSocket(InParent, InSocketName);
+
+	DisablePhysics();
+
 	ItemState = EItemState::EIS_Equipped;
+	PlayEquipSound();
+	DisableSphereCollision();
+	DeactivateEmbers();
+}
+
+void AWeapon::DeactivateEmbers()
+{
+	if (EmbersEffect)
+	{
+		EmbersEffect->Deactivate();
+	}
+}
+
+void AWeapon::DisableSphereCollision()
+{
+	if (Sphere)
+	{
+		Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+}
+
+void AWeapon::PlayEquipSound()
+{
 	if (EquipSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(
 			this, EquipSound, GetActorLocation()
 		);
-	}
-	if (Sphere)
-	{
-		Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	}
-	if (EmbersEffect)
-	{
-		EmbersEffect->Deactivate();
 	}
 }
 

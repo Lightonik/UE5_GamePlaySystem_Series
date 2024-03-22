@@ -6,7 +6,7 @@
 #include "Animation/AnimInstance.h"
 #include "CharacterTypes.h"
 
-#include "BarbAnimInstance.generated.h"  //всегда последний
+#include "BarbAnimInstance.generated.h"  
 
 /**
  * 
@@ -32,5 +32,11 @@ public:
 	bool IsFalling;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Movement | State")
-	ECharacterState CharacterState;
-};
+	ECharacterState CharacterState; 
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement | State")
+	EActionsState ActionState;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement | State")
+	TEnumAsByte<EDeathPose> DeathPose;
+};    

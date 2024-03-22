@@ -8,11 +8,17 @@
 #include "Animation/AnimInstance.h"
 #include "Items/Item.h"
 #include "Items/Weapons/Weapon.h"
-#include "Components/BoxComponent.h"
+#include "HUD/BarbHUD.h"
+#include "HUD/BarbOverlay.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/AttributeComponent.h"
+#include "InputMappingContext.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Kismet/GameplayStatics.h"
 
 
 
-// Sets default values
 ABarbCharacter::ABarbCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -23,6 +29,13 @@ ABarbCharacter::ABarbCharacter()
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);
+
+	GetMesh()->SetCollisionObjectType(ECollisionChannel::ECC_WorldDynamic);
+	GetMesh()->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Block);
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldDynamic, ECollisionResponse::ECR_Overlap);
+	GetMesh()->SetGenerateOverlapEvents(true);
+
 
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->SetupAttachment(GetRootComponent());
@@ -35,76 +48,135 @@ ABarbCharacter::ABarbCharacter()
 
 
 
+
+
+
 }
 
 void ABarbCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	Tags.Add(FName("BarbCharacter"));
+
+	InitOverlay();
+	//SetInputSystem();
+}
+
+void ABarbCharacter::SetInputSystem()
+{
+	if (ULocalPlayer* LocalPlayer = Cast<ULocalPlayer>(UGameplayStatics::GetPlayerController(GetWorld(), 0)->Player))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* InputSystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		{
+			if (!InputMappingContext.IsNull())
+			{
+				InputSystem->AddMappingContext(InputMappingContext.LoadSynchronous(), Priority);
+			}
+
+		}
+	}
+}
+
+void ABarbCharacter::InitOverlay()
+{/*
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController) {
+		ABarbHUD* HUD = Cast<ABarbHUD>(PlayerController->GetHUD());
+		if (HUD) {
+			Overlay = HUD->GetOverlay();
+			if (Overlay && Attributes) {
+				Overlay->SetHealthBarPercent(Attributes->GetHealthPercent());
+				Overlay->SetStaminaBarPercent(1.f);
+				Overlay->SetGold(0);
+				Overlay->SetSouls(0);
+			}
+		}
+	}*/
 }
 
 
 // Move and lookup
 
-void ABarbCharacter::MoveForward(float Value)
+
+void ABarbCharacter::EnhancedInputMove(const FInputActionValue& Value)
 {
+	/*void AFooBar::SomeCallbackFunc(const FInputActionInstance& Instance)
+    {
+        // Get the value of the Input Action for whatever type you want here...
+        FVector VectorValue = Instance.GetValue().Get<FVector>();*/
+
 	if (ActionsState != EActionsState::ECS_Unoccupied) return;
-	if (Controller && (Value != 0.f)) {
+	if (Controller) {
+		const FVector2D MoveVector = Value.Get<FVector2D>();
 		const FRotator ControlRotation = GetControlRotation();
 		const FRotator YawRotation(0.f, ControlRotation.Yaw, 0.f);
-		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		AddMovementInput(Direction, Value);
-	
+		FVector Direction;
+		//AddMovementInput(YawRotation, MoveVector.X);
+
+		if (MoveVector.X != 0)
+		{
+			Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+			AddMovementInput(Direction, MoveVector.X);
+		}
+		if (MoveVector.Y != 0)
+		{
+			Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+			AddMovementInput(Direction, MoveVector.Y);
+		}
 	}
 }
 
-void ABarbCharacter::MoveRight(float Value)
+void ABarbCharacter::EnhancedInputLook(const FInputActionValue& Value)
 {
-	if (ActionsState != EActionsState::ECS_Unoccupied) return;
-	if (Controller && (Value != 0.f)) {
-		const FRotator ControlRotation = GetControlRotation();
-		const FRotator YawRotation(0.f, ControlRotation.Yaw, 0.f);
-		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-		AddMovementInput(Direction, Value);
+	const FVector2D LookVector = Value.Get<FVector2D>();
 
-	}
+	AddControllerYawInput(LookVector.X);
+	AddControllerPitchInput(-(LookVector.Y));
 }
 
-void ABarbCharacter::Turn(float Value)
-{
-	AddControllerYawInput(Value);
-}
-
-void ABarbCharacter::LookUp(float Value)
-{
-	AddControllerPitchInput(Value);
-}
-
-void ABarbCharacter::EKeyPressed()
+void ABarbCharacter::EquipKeyPressed()
 {
 	AWeapon* OvelappingWeapon = Cast<AWeapon>(OverlappingItem);
-	if (OvelappingWeapon && !EquippedWeapon)
-	{ 
-		OvelappingWeapon->Equip(GetMesh(), FName("RightHandSocket"), this, this);
-		CharacterState = ECharacterState::ECS_EquippedOneHandedWeapon;
-		EquippedWeapon = OvelappingWeapon;
-	}
+	if (OvelappingWeapon && !EquippedWeapon) // TODO: �������� ������ �� �����
+		EquipWeapon(OvelappingWeapon);		
 	else 
 	{
-		if (CanDisarm()) 		
-		{
-			PlayEquipMontage(FName("Unequip"));
-			CharacterState = ECharacterState::ECS_Unequipped;
-			ActionsState = EActionsState::ECS_EquippingWeapon;
-		}
-		else if (CanArm())
-		{
-			PlayEquipMontage(FName("Equip"));
-			CharacterState = ECharacterState::ECS_EquippedOneHandedWeapon;
-			ActionsState = EActionsState::ECS_EquippingWeapon;
-		}
+		if (CanDisarm()) 
+			Disarm();
+
+		else if (CanArm()) 
+			Arm();
+	}
+}
+
+void ABarbCharacter::ActionKeyPressed()
+{
+
+	//AItem* ActionItem = OverlappingItem;
+	//PickUpOverlappingItem();
+}
+
+void ABarbCharacter::PickUpOverlappingItem(AItem* Item)
+{
+	if (OverlappingItem)
+	{
+		WearablesItems.AddUnique(OverlappingItem);
+		OverlappingItem->HideItemMesh();
+		OverlappingItem->DisableCollision();
+		RemoveOvelappingItem(OverlappingItem);
+	}
+}
+
+void ABarbCharacter::DropItem(AItem* Item)
+{
+	if (!Item) return;
+	if (WearablesItems.Contains(Item))
+	{
+		WearablesItems.Remove(Item);
 
 	}
+
 }
 
 bool ABarbCharacter::CanDisarm()
@@ -120,8 +192,36 @@ bool ABarbCharacter::CanArm()
 		EquippedWeapon;
 }
 
+bool ABarbCharacter::IsUnoccupied()
+{
+	return ActionsState == EActionsState::ECS_Unoccupied;
+}
+
+void ABarbCharacter::Arm()
+{
+	PlayEquipMontage(FName("Equip"));
+	CharacterState = ECharacterState::ECS_EquippedOneHandedWeapon;
+	ActionsState = EActionsState::ECS_EquippingWeapon;
+}
+
+void ABarbCharacter::Disarm()
+{
+	PlayEquipMontage(FName("Unequip"));
+	CharacterState = ECharacterState::ECS_Unequipped;
+	ActionsState = EActionsState::ECS_EquippingWeapon;
+
+}
+
+void ABarbCharacter::Die()
+{
+	Super::Die();
+	ActionsState = EActionsState::ECS_Dead;
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
 void ABarbCharacter::Attack()
 {
+	Super::Attack();
 	if (CanAttack())
 	{
 		PlayAttackMontage();
@@ -138,27 +238,6 @@ bool ABarbCharacter::CanAttack()
 
 // Animation 
 
-void ABarbCharacter::PlayAttackMontage()
-{
-	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	if (AnimInstance && AttackMontage) {
-		AnimInstance->Montage_Play(AttackMontage);
-		const int32 Selection = FMath::RandRange(0, 1);
-		FName SectionName = FName();
-		switch (Selection) {
-		case 0:
-			SectionName = FName("Attack1");
-			break;
-		case 1:
-			SectionName = FName("Attack2");
-			break;
-		default:
-			SectionName = FName("Attack1");
-			break;
-		}
-		AnimInstance->Montage_JumpToSection(SectionName, AttackMontage);
-	}
-}
 
 void ABarbCharacter::PlayEquipMontage(const FName& SectionName)
 {
@@ -172,12 +251,21 @@ void ABarbCharacter::PlayEquipMontage(const FName& SectionName)
 
 
 
+
 void ABarbCharacter::AttackEnd()
 {
 	ActionsState = EActionsState::ECS_Unoccupied;
 }
 
-void ABarbCharacter::Disarm()
+void ABarbCharacter::EquipWeapon(AWeapon* Weapon)
+{
+	Weapon->Equip(GetMesh(), FName("RightHandSocket"), this, this);
+	CharacterState = ECharacterState::ECS_EquippedOneHandedWeapon;
+	EquippedWeapon = Weapon;
+	OverlappingItem = nullptr;
+}
+
+void ABarbCharacter::AttachWeaponToBack()
 {
 	if (EquippedWeapon)
 	{
@@ -185,7 +273,7 @@ void ABarbCharacter::Disarm()
 	}
 }
 
-void ABarbCharacter::Arm()
+void ABarbCharacter::AttachWeaponToHand()
 {
 	if (EquippedWeapon)
 	{
@@ -198,6 +286,11 @@ void ABarbCharacter::FinishEquipping()
 	ActionsState = EActionsState::ECS_Unoccupied;
 }
 
+void ABarbCharacter::HitReactEnd()
+{
+	ActionsState = EActionsState::ECS_Unoccupied;
+}
+
 
 
 void ABarbCharacter::Tick(float DeltaTime)
@@ -206,30 +299,55 @@ void ABarbCharacter::Tick(float DeltaTime)
 
 }
 
+float ABarbCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	HandleDamage(DamageAmount);
+	SetHUDHealth();
+	return DamageAmount;
+}
+
+void ABarbCharacter::SetHUDHealth()
+{
+	if (Overlay && Attributes)
+	{
+		Overlay->SetHealthBarPercent(Attributes->GetHealthPercent());
+	}
+}
+
 // Bind control
 
 void ABarbCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	PlayerInputComponent->BindAxis(FName("MoveForward"), this, &ABarbCharacter::MoveForward);
-	PlayerInputComponent->BindAxis(FName("MoveRight"), this, &ABarbCharacter::MoveRight);
-	PlayerInputComponent->BindAxis(FName("Turn"), this, &ABarbCharacter::Turn);
-	PlayerInputComponent->BindAxis(FName("LookUp"), this, &ABarbCharacter::LookUp);
+	SetInputSystem();
 
-	PlayerInputComponent->BindAction(FName("Jump"), IE_Pressed, this, &ACharacter::Jump);
-	PlayerInputComponent->BindAction(FName("Equip"), IE_Pressed, this, &ABarbCharacter::EKeyPressed);
+	//PlayerInputComponent->BindAxis(FName("MoveForward"), this, &ABarbCharacter::MoveForward);
+	//PlayerInputComponent->BindAxis(FName("MoveRight"), this, &ABarbCharacter::MoveRight);
+	//PlayerInputComponent->BindAxis(FName("Turn"), this, &ABarbCharacter::Turn);
+	//PlayerInputComponent->BindAxis(FName("LookUp"), this, &ABarbCharacter::LookUp);
+	//PlayerInputComponent->BindAction(FName("Jump"), IE_Pressed, this, &ABarbCharacter::Jump);
+
+	PlayerInputComponent->BindAction(FName("Equip"), IE_Pressed, this, &ABarbCharacter::EquipKeyPressed);
+	PlayerInputComponent->BindAction(FName("Action"), IE_Pressed, this, &ABarbCharacter::ActionKeyPressed);
 	PlayerInputComponent->BindAction(FName("Attack"), IE_Pressed, this, &ABarbCharacter::Attack);
 
-
+	//Enhanced Input
+	UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent);
+	EnhancedInputComponent->BindAction(InputMove, ETriggerEvent::Triggered, this, &ABarbCharacter::EnhancedInputMove);
+	EnhancedInputComponent->BindAction(InputLook, ETriggerEvent::Triggered, this, &ABarbCharacter::EnhancedInputLook);
 
 }
 
-void ABarbCharacter::SetWeaponCollision(ECollisionEnabled::Type CollisionEnabled)
+
+
+void ABarbCharacter::GetHit_Implementation(const FVector& ImpactPoint, AActor* Hitter)
 {
-	if (EquippedWeapon && EquippedWeapon->GetWeaponBox())
+	Super::GetHit_Implementation(ImpactPoint, Hitter);
+	if (Attributes && Attributes->GetHealthPercent() > 0.f)
 	{
-		EquippedWeapon->GetWeaponBox()->SetCollisionEnabled(CollisionEnabled);
-		EquippedWeapon->IgnoreActors.Empty();
+		ActionsState = EActionsState::ECS_HitReaction;
 	}
-		
+
+	//SetWeaponCollision(ECollisionEnabled::NoCollision);
+
 }

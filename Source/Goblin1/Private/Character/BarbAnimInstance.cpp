@@ -12,19 +12,19 @@ void UBarbAnimInstance::NativeInitializeAnimation()
 	
 	BarbCharacter = Cast<ABarbCharacter>(TryGetPawnOwner());
 	if (BarbCharacter) {
-		BarbCharacterMovement = BarbCharacter->GetCharacterMovement();
-				
+		BarbCharacterMovement = BarbCharacter->GetCharacterMovement();				
 	}
-	
-
 }
 
 void UBarbAnimInstance::NativeUpdateAnimation(float DeltaTime)
 {
 	Super::NativeUpdateAnimation(DeltaTime);
+
 	if (BarbCharacterMovement) {
 		GroundSpeed = UKismetMathLibrary::VSizeXY(BarbCharacterMovement->Velocity);
 		IsFalling = BarbCharacterMovement->IsFalling();
 		CharacterState = BarbCharacter->GetCharacterState();
+		ActionState = BarbCharacter->GetActionState();
+		DeathPose = BarbCharacter->GetDeathPose();
 	}
 }

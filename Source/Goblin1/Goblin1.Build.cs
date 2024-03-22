@@ -9,7 +9,7 @@ public class Goblin1 : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", 
-			"GeometryCollectionEngine", "Niagara", "UMG", "AIModule" });
+			"GeometryCollectionEngine", "Niagara", "UMG", "AIModule", "EnhancedInput" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 

@@ -15,8 +15,19 @@ enum class EItemState : uint8
 
 };
 
+enum class EItemActions : uint8
+{
+	EIA_Examine,
+	EIA_Pickup,
+	EIA_Equip,
+	EIA_Store
+};
+
+
 
 class USphereComponent;
+class UNiagaraComponent;
+
 
 UCLASS()
 class GOBLIN1_API AItem : public AActor
@@ -24,13 +35,24 @@ class GOBLIN1_API AItem : public AActor
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this actor's properties
-	AItem();
+
+	//	<AActor>
 	virtual void Tick(float DeltaTime) override;
+	//	</AActor>
+
+	AItem();
+
+	void HideItemMesh();
+	void DisableCollision();
+
 
 protected:
-	// Called when the game starts or when spawned
+
+	//	<AActor>
 	virtual void BeginPlay() override;
+	//	</AActor>
+
+	void DisablePhysics();
 
 	UFUNCTION()
 	virtual void OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
@@ -47,12 +69,25 @@ protected:
 	USphereComponent* Sphere;
 
 	UPROPERTY(EditAnywhere)
-	class UNiagaraComponent* EmbersEffect;  
+	UNiagaraComponent* EmbersEffect;  
+
+	// Interactions
+	UPROPERTY(VisibleAnywhere)
+	TArray<ACharacter*> OverlappedByCharacter;
+
+	UPROPERTY(VisibleAnywhere)
+	TArray<ACharacter*> UsedByCharacter;
 
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	float RuningTime = 0.f;
+	float SphereRadius = 64.f;
+	bool bHaveCollisions = true;
+	int32 Priority = 0;
 
+public:
 
+	FORCEINLINE void AddNewToUsedBy(ACharacter* Character) { UsedByCharacter.AddUnique(Character); }
+	FORCEINLINE int32 GetPriority() { return Priority; }
 
 };
